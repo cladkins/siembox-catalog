@@ -42,3 +42,6 @@ jobs:
 
       - name: Validate parsers (strict + self-tests)
         run: node .siembox/backend/dist/scripts/validate-parsers.js "$GITHUB_WORKSPACE/parsers"
+
+      - name: Validate detections (strict)
+        run: node .siembox/backend/dist/scripts/validate-detections.js "$GITHUB_WORKSPACE/detections"

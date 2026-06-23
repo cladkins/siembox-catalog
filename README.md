@@ -28,8 +28,9 @@ PARSER_CATALOG_PATH=parsers
 ## Layout
 
 ```
-parsers/   *.parser.json   — one portable parser per file
-schema/    parser.schema.json — JSON Schema (editor autocomplete + docs)
+parsers/     *.parser.json   — one portable parser per file
+detections/  *.yaml          — detection rules (by category), the SIEMBox rule format
+schema/      parser.schema.json — JSON Schema (editor autocomplete + docs)
 ```
 
 ## Contributing
