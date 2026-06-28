@@ -1,0 +1,12 @@
+version: 2
+updates:
+  # Keep the SHA-pinned GitHub Actions in our workflows current.
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+# The catalog ships declarative parser/detection data only — there is no
+# committed npm manifest, so there is no npm ecosystem entry here. CI installs
+# its one tool (recheck) ad-hoc with a pinned major version.

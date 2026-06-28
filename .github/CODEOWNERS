@@ -1,0 +1,7 @@
+# Catalog review routing. Changes to parser/detection data, the schema, or the
+# CI/governance configuration require review from a catalog maintainer. Branch
+# protection on `main` enforces a code-owner approval for these paths.
+/parsers/      @cladkins
+/detections/   @cladkins
+/schema/       @cladkins
+/.github/      @cladkins
