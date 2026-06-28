@@ -4,7 +4,7 @@
   "description": "Parses NGINX Proxy Manager error logs for troubleshooting and security monitoring",
   "parser_type": "regex",
   "priority": 49,
-  "pattern": "^(?<timestamp>\\d{4}/\\d{2}/\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})\\s+\\[(?<log_level>\\w+)\\]\\s+(?<message>.*)$",
+  "pattern": "^(?<timestamp>\\d{4}/\\d{2}/\\d{2} \\d{2}:\\d{2}:\\d{2}) \\[(?<log_level>\\w+)\\] (?<message>.*)$",
   "field_mappings": {
     "timestamp": "timestamp",
     "log_level": "log_level",
