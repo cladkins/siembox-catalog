@@ -5,6 +5,11 @@ name: validate-catalog
 # pipeline; detections are validated against what the rules engine actually
 # supports. Parser regexes added or changed in the PR are also ReDoS-scanned.
 #
+# This workflow runs on EVERY PR to main (no path filter) so it can always report
+# status and is therefore safe to mark as a required branch-protection check.
+# The expensive build + validate steps run only when parser/detection/schema
+# files actually change; otherwise the job no-ops to green in seconds.
+#
 # Security posture: this uses `pull_request` (NOT `pull_request_target`), so fork
 # PRs run with a read-only token and no access to repo secrets. The validator is
 # built from the trusted cladkins/siembox repo, never from the PR, so a fork
@@ -12,10 +17,6 @@ name: validate-catalog
 on:
   pull_request:
     branches: [main]
-    paths:
-      - 'parsers/**'
-      - 'detections/**'
-      - 'schema/**'
   workflow_dispatch:
 
 permissions:
@@ -34,28 +35,37 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           path: catalog
-          # Full history so the ReDoS scan can diff against the PR base commit.
+          # Full history so we can diff against the PR base commit.
           fetch-depth: 0
 
-      - name: Checkout validator (trusted SIEMBox)
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          repository: cladkins/siembox
-          ref: ${{ env.SIEMBOX_REF }}
-          path: siembox
-
-      - name: Set up Node.js
-        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
-        with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: siembox/backend/package-lock.json
-
-      - name: Build validator
-        working-directory: siembox/backend
-        run: npm ci && npm run build
+      - name: Detect relevant changes
+        id: changes
+        working-directory: catalog
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "parsers_changed=false" >> "$GITHUB_OUTPUT"
+            echo "Manual run: validating the entire catalog."
+            exit 0
+          fi
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          CHANGED="$(git diff --name-only "$BASE_SHA" HEAD -- parsers detections schema || true)"
+          if [ -n "$CHANGED" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+            echo "Parser/detection/schema changes detected:"; echo "$CHANGED"
+          else
+            echo "relevant=false" >> "$GITHUB_OUTPUT"
+            echo "No parser/detection/schema changes; validation steps skipped."
+          fi
+          PARSERS="$(git diff --name-only --diff-filter=AM "$BASE_SHA" HEAD -- parsers | grep '\.parser\.json$' || true)"
+          if [ -n "$PARSERS" ]; then
+            echo "parsers_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "parsers_changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: ReDoS pre-scan (changed parser regexes)
+        if: steps.changes.outputs.parsers_changed == 'true'
         working-directory: catalog
         env:
           # Only parsers added/modified in this PR are gated; pre-existing
@@ -65,11 +75,34 @@ jobs:
           npm install recheck@4 --no-save --no-audit --no-fund
           node .github/scripts/redos-scan.mjs
 
+      - name: Checkout validator (trusted SIEMBox)
+        if: steps.changes.outputs.relevant == 'true'
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          repository: cladkins/siembox
+          ref: ${{ env.SIEMBOX_REF }}
+          path: siembox
+
+      - name: Set up Node.js
+        if: steps.changes.outputs.relevant == 'true'
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: siembox/backend/package-lock.json
+
+      - name: Build validator
+        if: steps.changes.outputs.relevant == 'true'
+        working-directory: siembox/backend
+        run: npm ci && npm run build
+
       - name: Validate parsers (strict + self-tests)
+        if: steps.changes.outputs.relevant == 'true'
         working-directory: siembox/backend
         run: npm run validate-parsers -- "$GITHUB_WORKSPACE/catalog/parsers"
 
       - name: Validate detections (strict)
+        if: steps.changes.outputs.relevant == 'true'
         working-directory: siembox/backend
         run: |
           DET="$GITHUB_WORKSPACE/catalog/detections"
