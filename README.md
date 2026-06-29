@@ -56,7 +56,9 @@ rules engine / rules importer; each rule is self-contained and order-independent
 parsers/      <name>.parser.json       — one portable parser per file
 detections/   <category>/<ID>-<slug>.yaml — detection rules, grouped by category
 schema/       parser.schema.json       — JSON Schema for parsers (editor autocomplete + docs)
-.github/      workflows/validate.yml   — CI: strict validation + parser self-tests
+.github/      workflows/validate-catalog.yml — CI: schema + self-tests + ReDoS scan
+              CODEOWNERS, pull_request_template.md, dependabot.yml, scripts/redos-scan.mjs
+SECURITY.md   — how to report a vulnerability
 ```
 
 Detection categories: `access-control`, `application`, `authentication`,
@@ -67,23 +69,29 @@ response playbooks) lives in SIEMBox at
 
 ## Validation & CI
 
-The **Validate parsers** workflow checks out the SIEMBox repo, builds the
-validator, and runs it against this catalog on every PR and push:
+The **`validate-catalog`** workflow checks out the SIEMBox repo, builds the
+validator, and runs it against this catalog on every PR to `main`:
 
-- `validate-parsers.js parsers/` — strict structural validation **plus** each
-  parser's `test_samples` through the real parse → derive → normalize pipeline.
-- `validate-detections.js detections/` — strict validation of every rule against
-  what the rules engine actually supports (operators, severities, aggregation,
-  alert template).
+- `validate-parsers` — strict structural validation **plus** each parser's
+  `test_samples` through the real parse → derive → normalize pipeline.
+- `validate-detections` — strict validation of every rule against what the rules
+  engine actually supports (operators, severities, aggregation, alert template).
+- **ReDoS pre-scan** — parser regexes added or changed in a PR are checked with
+  [`recheck`](https://github.com/makenowjust-labs/recheck); a catastrophic-
+  backtracking pattern fails the build.
 
-A green check is the promise: it imports into SIEMBox and behaves the same.
+CI is fork-safe (read-only token, no secrets) and builds the validator from the
+trusted SIEMBox repo, so a PR can't change how it's validated. `main` is
+protected: `validate-catalog` is a required check and changes land through
+reviewed, squash-merged PRs. A green check is the promise: it imports into
+SIEMBox and behaves the same.
 
 ## Contributing
 
 Read [CONTRIBUTING.md](./CONTRIBUTING.md). In short: add a
 `parsers/<name>.parser.json` (with canonical field mappings and at least one
 `test_sample`) or a `detections/<category>/<name>.yaml` rule, open a PR, and make
-the **Validate parsers** check green.
+the **`validate-catalog`** check green.
 
 ## License
 
