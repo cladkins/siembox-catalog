@@ -75,6 +75,13 @@ jobs:
           npm install recheck@4 --no-save --no-audit --no-fund
           node .github/scripts/redos-scan.mjs
 
+      - name: Duplicate-name check (parsers + detections)
+        if: steps.changes.outputs.relevant == 'true'
+        working-directory: catalog
+        run: |
+          npm install js-yaml --no-save --no-audit --no-fund
+          node .github/scripts/duplication-check.mjs
+
       - name: Checkout validator (trusted SIEMBox)
         if: steps.changes.outputs.relevant == 'true'
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
