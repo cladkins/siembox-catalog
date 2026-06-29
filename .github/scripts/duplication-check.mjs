@@ -1,9 +1,17 @@
 #!/usr/bin/env node
 // Duplicate-submission guard for the SIEMBox catalog.
 //
-// Fails CI if two parsers share a `name` (the upsert key on import), or if two
-// detections share a `name` or a filename — i.e. a submission that would clobber
-// or shadow an existing entry. Matching is case-insensitive.
+// Fails CI if a submission duplicates an existing entry by NAME or by CONTENT:
+//   - parsers: same `name` (the upsert key on import), OR identical functional
+//     content (parser_type + pattern + field_mappings + derivations).
+//   - detections: same `name`, same filename, OR identical match logic
+//     (conditions + aggregation).
+//
+// Name/filename matching is case-insensitive. Content matching ignores cosmetic
+// fields (description, metadata, priority, event_type, test_samples, alert text)
+// so it catches "a differently-named copy that does the same thing". Note: two
+// parsers with the same pattern but different field_mappings (e.g. a different
+// `service` label) are NOT duplicates — they produce different output.
 //
 // Usage: node .github/scripts/duplication-check.mjs [catalogRoot=.]
 
@@ -28,51 +36,73 @@ function walk(dir, ext, out = []) {
   return out;
 }
 
+// Deterministic fingerprint: sort object keys recursively; preserve array order.
+function canon(v) {
+  if (Array.isArray(v)) return v.map(canon);
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const k of Object.keys(v).sort()) o[k] = canon(v[k]);
+    return o;
+  }
+  return v;
+}
+const fp = (v) => JSON.stringify(canon(v));
+
 let failures = 0;
 
-// entries: [{ file, key }] — report any key shared by 2+ files (case-insensitive).
-function checkUnique(label, entries) {
+// entries: [{ file, key }]; flag any key shared by 2+ files.
+function flagDuplicates(kind, entries, { ci = false, showKey = true } = {}) {
   const seen = new Map();
   for (const { file, key } of entries) {
     if (key == null || String(key).trim() === '') continue;
-    const norm = String(key).trim().toLowerCase();
+    const norm = ci ? String(key).trim().toLowerCase() : String(key);
     if (!seen.has(norm)) seen.set(norm, []);
     seen.get(norm).push({ file, key });
   }
   for (const group of seen.values()) {
     if (group.length > 1) {
       failures++;
-      console.error(`✗ duplicate ${label}: ${JSON.stringify(group[0].key)}`);
+      console.error(`✗ duplicate ${kind}${showKey ? `: ${JSON.stringify(group[0].key)}` : ''}`);
       for (const g of group) console.error(`    ${g.file}`);
     }
   }
 }
 
-// Parsers — unique `name`.
+// ---- Parsers: unique name + unique functional content ----
 const parsers = walk(join(ROOT, 'parsers'), '.parser.json').map((f) => {
-  let name;
-  try { name = JSON.parse(readFileSync(f, 'utf8')).name; }
+  let d = {};
+  try { d = JSON.parse(readFileSync(f, 'utf8')); }
   catch (e) { console.error(`✗ ${rel(f)}: invalid JSON (${e.message})`); failures++; }
-  return { file: rel(f), key: name };
+  return { file: rel(f), d };
 });
-checkUnique('parser name', parsers);
+flagDuplicates('parser name', parsers.map((p) => ({ file: p.file, key: p.d.name })), { ci: true });
+flagDuplicates(
+  'parser content (identical pattern + field_mappings + derivations)',
+  parsers.map((p) => ({
+    file: p.file,
+    key: fp({ parser_type: p.d.parser_type, pattern: p.d.pattern, field_mappings: p.d.field_mappings, derivations: p.d.derivations || [] }),
+  })),
+  { showKey: false }
+);
 
-// Detections — unique `name` and unique filename (catches duplicate rule IDs).
+// ---- Detections: unique name + filename + match logic ----
 const detFiles = walk(join(ROOT, 'detections'), '.yaml');
-const detNames = [];
-const detBasenames = [];
-for (const f of detFiles) {
-  let name;
-  try { name = (yaml.load(readFileSync(f, 'utf8')) || {}).name; }
+const dets = detFiles.map((f) => {
+  let d = {};
+  try { d = yaml.load(readFileSync(f, 'utf8')) || {}; }
   catch (e) { console.error(`✗ ${rel(f)}: invalid YAML (${e.message})`); failures++; }
-  detNames.push({ file: rel(f), key: name });
-  detBasenames.push({ file: rel(f), key: f.split('/').pop().replace(/\.yaml$/, '') });
-}
-checkUnique('detection name', detNames);
-checkUnique('detection filename', detBasenames);
+  return { file: rel(f), base: f.split('/').pop().replace(/\.yaml$/, ''), d };
+});
+flagDuplicates('detection name', dets.map((x) => ({ file: x.file, key: x.d.name })), { ci: true });
+flagDuplicates('detection filename', dets.map((x) => ({ file: x.file, key: x.base })), { ci: true });
+flagDuplicates(
+  'detection logic (identical conditions + aggregation)',
+  dets.map((x) => ({ file: x.file, key: fp({ conditions: x.d.conditions || [], aggregation: x.d.aggregation || null }) })),
+  { showKey: false }
+);
 
 if (failures) {
-  console.error(`\nDuplication check FAILED: ${failures} issue(s). Each parser/detection must be uniquely named.`);
+  console.error(`\nDuplication check FAILED: ${failures} issue(s). Each parser/detection must be unique in name and behavior.`);
   process.exit(1);
 }
-console.log(`Duplication check passed: ${parsers.length} parsers, ${detFiles.length} detections — no duplicates.`);
+console.log(`Duplication check passed: ${parsers.length} parsers, ${detFiles.length} detections — no name or content duplicates.`);
