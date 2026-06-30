@@ -1,6 +1,6 @@
 {
   "schema": "siembox.parser/v1",
-  "name": "Generic Syslog",
+  "name": "generic-syslog",
   "description": "Fallback parser for standard syslog format",
   "parser_type": "regex",
   "priority": 1000,
