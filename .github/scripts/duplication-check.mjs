@@ -77,10 +77,15 @@ const parsers = walk(join(ROOT, 'parsers'), '.parser.json').map((f) => {
 });
 flagDuplicates('parser name', parsers.map((p) => ({ file: p.file, key: p.d.name })), { ci: true });
 flagDuplicates(
-  'parser content (identical pattern + field_mappings + derivations)',
+  'parser content (same pattern, or same field_mappings+derivations for json)',
   parsers.map((p) => ({
     file: p.file,
-    key: fp({ parser_type: p.d.parser_type, pattern: p.d.pattern, field_mappings: p.d.field_mappings, derivations: p.d.derivations || [] }),
+    // Two regex/grok parsers with an identical pattern parse the same lines and
+    // can't be routed apart by source, so they're duplicates regardless of the
+    // labels they map to. json parsers have no pattern → compare their mapping.
+    key: p.d.pattern && String(p.d.pattern).trim() !== ''
+      ? 'pattern:' + p.d.pattern
+      : 'json:' + fp({ field_mappings: p.d.field_mappings, derivations: p.d.derivations || [] }),
   })),
   { showKey: false }
 );
