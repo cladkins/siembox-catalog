@@ -1,0 +1,81 @@
+{
+  "schema": "siembox.parser/v1",
+  "name": "termix-session",
+  "parser_type": "regex",
+  "pattern": "^\\[(?<timestamp>\\d{1,2}:\\d{2}:\\d{2}\\s*[AP]M)\\]\\s+\\[(?<outcome>[A-Z]+)\\]\\s+(?:\\[[^\\]]*\\]\\s+)?(?<event>.+?)\\s+\\[op:(?<action>[^,\\]]+)(?<details>[^\\]]*)\\]\\s*$",
+  "field_mappings": {
+    "event": "event",
+    "action": "action",
+    "details": "details",
+    "outcome": "outcome",
+    "timestamp": "timestamp"
+  },
+  "description": "Termix (web SSH terminal) activity events: any [op:...] action — SSH session connect/disconnect, backend init, etc. Captures the op (action) plus user/host/session when present.",
+  "priority": 30,
+  "derivations": [
+    {
+      "set": {
+        "service": "termix"
+      }
+    },
+    {
+      "extract": {
+        "user": {
+          "from": "details",
+          "pattern": "user:([^,\\]]+)"
+        }
+      }
+    },
+    {
+      "extract": {
+        "termix_host": {
+          "from": "details",
+          "pattern": "host:([^,\\]]+)"
+        }
+      }
+    },
+    {
+      "extract": {
+        "session_id": {
+          "from": "details",
+          "pattern": "session:([^,\\]]+)"
+        }
+      }
+    }
+  ],
+  "event_type": "termix_session",
+  "enabled": true,
+  "test_samples": [
+    {
+      "input": "[8:03:56 AM] [SUCCESS] [🖥️] SSH connection established [op:terminal_ssh_connected,user:z3L6sEToDbcomvac8R72M,host:2,session:IQHj6km0y0jF1iQ5bq0Wt]",
+      "expect": {
+        "user": "z3L6sEToDbcomvac8R72M",
+        "action": "terminal_ssh_connected",
+        "service": "termix",
+        "session_id": "IQHj6km0y0jF1iQ5bq0Wt",
+        "termix_host": "2"
+      },
+      "description": "full session",
+      "packet_source_ip": "192.168.1.76"
+    },
+    {
+      "input": "[8:03:55 AM] [SUCCESS] [🚀] Database initialized [op:backend_init_db]",
+      "expect": {
+        "user": null,
+        "event": "Database initialized",
+        "action": "backend_init_db",
+        "service": "termix",
+        "session_id": null
+      },
+      "description": "op-only"
+    },
+    {
+      "input": "[2024-01-15 12:00:00] [INFO] not termix",
+      "expect": {
+        "action": null,
+        "service": null
+      },
+      "description": "guard"
+    }
+  ]
+}
