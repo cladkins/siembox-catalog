@@ -1,0 +1,60 @@
+{
+  "schema": "siembox.parser/v1",
+  "name": "linux-wifi-ieee80211-node-vid",
+  "parser_type": "regex",
+  "pattern": "^\\[(?<kernel_time>[\\d.]+)\\]\\s+\\[(?<interface>[^\\]]+)\\]\\s+(?<event_func>ieee80211_set_node_vid)\\s+node\\s+(?<mac>[0-9a-f:]{17})\\s+(?<lan_iface>\\S+)\\[(?<lan_index>\\d+)\\]\\s+dvlan\\s+stas\\s+(?<dvlan_stas>\\d+)",
+  "field_mappings": {
+    "mac": "source_mac",
+    "interface": "interface",
+    "lan_iface": "lan_iface",
+    "lan_index": "lan_index",
+    "dvlan_stas": "dvlan_stas",
+    "event_func": "event_func",
+    "kernel_time": "kernel_time"
+  },
+  "description": "Parses Linux kernel ieee80211_set_node_vid log messages from wireless interfaces, capturing node MAC, interface, LAN/VLAN, and DVLAN station count",
+  "priority": 400,
+  "derivations": [
+    {
+      "set": {
+        "event": "wifi_node_vid_set"
+      },
+      "when": {
+        "event_func": {
+          "exists": true
+        }
+      }
+    },
+    {
+      "when": {
+        "interface": {
+          "exists": true
+        }
+      },
+      "extract": {
+        "host": {
+          "from": "interface",
+          "group": 1,
+          "pattern": "^(wifi\\d+)"
+        }
+      }
+    }
+  ],
+  "event_type": "wifi_node_vid",
+  "enabled": true,
+  "test_samples": [
+    {
+      "input": "[772908.384820] [wifi0ap1] ieee80211_set_node_vid node c0:49:ef:8c:07:2c lan[0] dvlan stas 0",
+      "expect": {
+        "event": "wifi_node_vid_set",
+        "interface": "wifi0ap1",
+        "lan_iface": "lan",
+        "lan_index": "0",
+        "dvlan_stas": "0",
+        "event_func": "ieee80211_set_node_vid",
+        "source_mac": "c0:49:ef:8c:07:2c",
+        "kernel_time": "772908.384820"
+      }
+    }
+  ]
+}
