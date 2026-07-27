@@ -1,0 +1,83 @@
+{
+  "schema": "siembox.parser/v1",
+  "name": "termix-backend-startup",
+  "parser_type": "regex",
+  "pattern": "^\\[(?<time>\\d{1,2}:\\d{2}:\\d{2}\\s+(?:AM|PM))\\]\\s+\\[(?<level>[A-Z]+)\\]\\s+\\[(?<emoji>[^\\]]+)\\]\\s+(?<message>.+?)\\s+\\[op:(?<operation>[^\\]]+)\\]\\s*$",
+  "field_mappings": {
+    "time": "timestamp_raw",
+    "emoji": "log_icon",
+    "level": "severity",
+    "message": "message",
+    "operation": "event"
+  },
+  "description": "Parses Termix Backend application log lines with bracketed timestamp, level, emoji, message, and op tag",
+  "priority": 300,
+  "derivations": [
+    {
+      "set": {
+        "service": "termix-backend"
+      },
+      "when": {
+        "event": {
+          "equals": "startup"
+        }
+      }
+    },
+    {
+      "extract": {
+        "version": {
+          "from": "message",
+          "group": 1,
+          "pattern": "Version:\\s+([\\d.]+)"
+        }
+      }
+    },
+    {
+      "set": {
+        "severity_level": "informational"
+      },
+      "when": {
+        "severity": {
+          "equals": "INFO"
+        }
+      }
+    },
+    {
+      "set": {
+        "severity_level": "low"
+      },
+      "when": {
+        "severity": {
+          "equals": "WARN"
+        }
+      }
+    },
+    {
+      "set": {
+        "severity_level": "high"
+      },
+      "when": {
+        "severity": {
+          "equals": "ERROR"
+        }
+      }
+    }
+  ],
+  "event_type": "app_log",
+  "enabled": true,
+  "test_samples": [
+    {
+      "input": "[8:02:01 AM] [INFO] [📦] Termix Backend starting - Version: 2.6.0 [op:startup]",
+      "expect": {
+        "event": "startup",
+        "message": "Termix Backend starting - Version: 2.6.0",
+        "service": "termix-backend",
+        "version": "2.6.0",
+        "log_icon": "📦",
+        "severity": "INFO",
+        "timestamp_raw": "8:02:01 AM",
+        "severity_level": "informational"
+      }
+    }
+  ]
+}
