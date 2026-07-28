@@ -1,0 +1,163 @@
+{
+  "schema": "siembox.parser/v1",
+  "name": "qualcomm-wifi-ieee80211",
+  "parser_type": "regex",
+  "pattern": "^\\[\\s*(?<timestamp>[\\d.]+)\\]\\s+(?:(?<wlan_prefix>wlan):\\s*\\[\\d+:\\w+:\\w+\\]\\s+\\[\\w+\\]\\s+(?<vap>vap-\\d+)\\((?<iface>\\w+)\\):\\s*(?:\\[(?<mac>[0-9a-f:]{17})\\])?(?<wlan_msg>.+)|\\[(?<iface2>\\w+)\\]\\s+(?<bracket_msg>.+)|(?<func>ieee80211_\\w+):\\s*(?<func_msg>.+))$",
+  "field_mappings": {
+    "mac": "host",
+    "vap": "target_user",
+    "iface": "service",
+    "iface2": "service",
+    "func_msg": "message",
+    "wlan_msg": "message",
+    "bracket_msg": "message"
+  },
+  "description": "Parses Qualcomm/Atheros 802.11 kernel driver log messages including station association, authentication, and node management events",
+  "priority": 300,
+  "derivations": [
+    {
+      "set": {
+        "event": "wifi_station_associated"
+      },
+      "when": {
+        "message": {
+          "contains": "station associated"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "wifi_auth_duplicate"
+      },
+      "when": {
+        "message": {
+          "contains": "recv another auth frame"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "wifi_auth_frame_received"
+      },
+      "when": {
+        "message": {
+          "contains": "recv auth frame"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "wifi_node_vlan_set"
+      },
+      "when": {
+        "message": {
+          "contains": "ieee80211_set_node_vid"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "wifi_node_tagged"
+      },
+      "when": {
+        "message": {
+          "contains": "has been tagged"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "wifi_station_disassociated"
+      },
+      "when": {
+        "message": {
+          "contains": "disassoc"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "wifi_deauth"
+      },
+      "when": {
+        "message": {
+          "contains": "deauth"
+        }
+      }
+    }
+  ],
+  "event_type": "wifi-80211",
+  "enabled": true,
+  "test_samples": [
+    {
+      "input": "[776303.366550] [wifi0ap1] ieee80211_set_node_vid node c0:49:ef:8c:07:2c lan[0] dvlan stas 0",
+      "expect": {
+        "event": "wifi_node_vlan_set",
+        "message": "ieee80211_set_node_vid node c0:49:ef:8c:07:2c lan[0] dvlan stas 0",
+        "service": "wifi0ap1"
+      }
+    },
+    {
+      "input": "[776303.355204] wlan: [0:I:ANY] [UNSPECIFIED] vap-1(wifi0ap1): [c0:49:ef:8c:07:2c]station associated at aid 2: short preamble, long slot time, QoS, HT40 cap 0x31",
+      "expect": {
+        "host": "c0:49:ef:8c:07:2c",
+        "event": "wifi_station_associated",
+        "message": "station associated at aid 2: short preamble, long slot time, QoS, HT40 cap 0x31",
+        "service": "wifi0ap1",
+        "target_user": "vap-1"
+      }
+    },
+    {
+      "input": "[776303.355151] ieee80211_update_node_ecm_flags: node with aid 2 and mac c0:49:ef:8c:07:2c has been tagged [ dvlan ecm accelerated ]",
+      "expect": {
+        "event": "wifi_node_tagged",
+        "message": "node with aid 2 and mac c0:49:ef:8c:07:2c has been tagged [ dvlan ecm accelerated ]"
+      }
+    },
+    {
+      "input": "[776303.307492] wlan: [0:I:ANY] [UNSPECIFIED] vap-1(wifi0ap1): [c0:49:ef:8c:07:2c]recv auth frame with algorithm 0 seq 1 rssi:44 minrssi:0",
+      "expect": {
+        "host": "c0:49:ef:8c:07:2c",
+        "event": "wifi_auth_frame_received",
+        "message": "recv auth frame with algorithm 0 seq 1 rssi:44 minrssi:0",
+        "service": "wifi0ap1",
+        "target_user": "vap-1"
+      }
+    },
+    {
+      "input": "[776303.307533] wlan: [0:I:ANY] [UNSPECIFIED] vap-1(wifi0ap1): [c0:49:ef:8c:07:2c]recv another auth frame when previous is in progress",
+      "expect": {
+        "host": "c0:49:ef:8c:07:2c",
+        "event": "wifi_auth_duplicate",
+        "message": "recv another auth frame when previous is in progress",
+        "service": "wifi0ap1",
+        "target_user": "vap-1"
+      }
+    },
+    {
+      "input": "[ 3456.017129] [wifi0ap1] ieee80211_set_node_vid node c0:49:ef:8c:07:2c lan[0] dvlan stas 0",
+      "expect": {
+        "event": "wifi_node_vlan_set",
+        "message": "ieee80211_set_node_vid node c0:49:ef:8c:07:2c lan[0] dvlan stas 0",
+        "service": "wifi0ap1"
+      }
+    },
+    {
+      "input": "[ 3456.001043] wlan: [0:I:ANY] [UNSPECIFIED] vap-1(wifi0ap1): [c0:49:ef:8c:07:2c]station associated at aid 2: short preamble, long slot time, QoS, HT40 cap 0x31",
+      "expect": {
+        "host": "c0:49:ef:8c:07:2c",
+        "event": "wifi_station_associated",
+        "message": "station associated at aid 2: short preamble, long slot time, QoS, HT40 cap 0x31",
+        "service": "wifi0ap1",
+        "target_user": "vap-1"
+      }
+    },
+    {
+      "input": "[ 3456.000935] ieee80211_update_node_ecm_flags: node with aid 2 and mac c0:49:ef:8c:07:2c has been tagged [ dvlan ecm accelerated ]",
+      "expect": {
+        "event": "wifi_node_tagged",
+        "message": "node with aid 2 and mac c0:49:ef:8c:07:2c has been tagged [ dvlan ecm accelerated ]"
+      }
+    }
+  ]
+}
