@@ -1,0 +1,186 @@
+{
+  "schema": "siembox.parser/v1",
+  "name": "ubnt-hostapd-wifi",
+  "parser_type": "regex",
+  "pattern": "^(?:(?<process>hostapd)\\[(?<pid>\\d+)\\]:\\s+(?<module>[\\w.]+)\\(\\):\\s+(?<msg1>.+?mac:\\s*\\[(?<sta_mac>[0-9A-Fa-f:]{17})\\]\\s*errno:(?<errno>\\d+))|(?<vlan_proc>VLAN):\\s+(?<vlan_func>[\\w_]+):\\s+(?<msg2>.+?for interface\\s+(?<interface>[\\w.]+)\\s+\\([^)]+\\):\\s+(?<error>.+))|(?<iface>[\\w\\d]+):\\s+STA\\s+(?<client_mac>[0-9a-fA-F:]{17})\\s+(?<proto>WPA|IEEE\\s+802\\.11):\\s+(?<msg3>.+)|(?<iface2>[\\w\\d]+):\\s+AP-STA-POSSIBLE-PSK-MISMATCH\\s+(?<psk_mac>[0-9a-fA-F:]{17})|(?<drv_func>wpa_driver_[\\w]+):\\s+ifindex=(?<ifindex>\\d+)\\s+\\((?<drv_iface>[\\w\\d]+)\\)\\s+(?<msg4>.+))$",
+  "field_mappings": {
+    "pid": "process_id",
+    "msg1": "message",
+    "msg2": "message",
+    "msg3": "message",
+    "msg4": "message",
+    "errno": "error_code",
+    "error": "error_detail",
+    "iface": "host",
+    "proto": "service",
+    "iface2": "host",
+    "module": "component",
+    "ifindex": "process_id",
+    "process": "service",
+    "psk_mac": "user",
+    "sta_mac": "host",
+    "drv_func": "service",
+    "drv_iface": "host",
+    "interface": "host",
+    "vlan_func": "component",
+    "vlan_proc": "service",
+    "client_mac": "user"
+  },
+  "description": "Parses Ubiquiti/hostapd wireless access point log messages including WPA handshake events, PSK mismatches, VLAN errors, and station associations",
+  "priority": 300,
+  "derivations": [
+    {
+      "set": {
+        "event": "keyid_ioctl_failed"
+      },
+      "when": {
+        "message": {
+          "contains": "keyid ioctl failed"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "eapol_key_frame"
+      },
+      "when": {
+        "message": {
+          "contains": "EAPOL-Key frame"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "wpa_handshake_start"
+      },
+      "when": {
+        "message": {
+          "contains": "sending 1/4 msg of 4-Way Handshake"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "psk_mismatch"
+      },
+      "when": {
+        "message": {
+          "contains": "AP-STA-POSSIBLE-PSK-MISMATCH"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "psk_mismatch"
+      },
+      "when": {
+        "user": {
+          "exists": true
+        },
+        "message": {
+          "exists": false
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "sta_associated"
+      },
+      "when": {
+        "message": {
+          "contains": "associated"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "interface_down_error"
+      },
+      "when": {
+        "message": {
+          "contains": "Network is down"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "set_key_driver_call"
+      },
+      "when": {
+        "message": {
+          "contains": "alg="
+        }
+      }
+    }
+  ],
+  "event_type": "wifi-ap",
+  "enabled": true,
+  "test_samples": [
+    {
+      "input": "hostapd[2306]: ubnt_sta_ht_user.ubnt_sta_ht_set_keyid(): keyid ioctl failed: mac: [2A:6A:1B:60:BA:A1] errno:6",
+      "expect": {
+        "host": "2A:6A:1B:60:BA:A1",
+        "event": "keyid_ioctl_failed",
+        "service": "hostapd",
+        "component": "ubnt_sta_ht_user.ubnt_sta_ht_set_keyid",
+        "error_code": "6",
+        "process_id": "2306"
+      }
+    },
+    {
+      "input": "VLAN: ifconfig_helper: ioctl(SIOCSIFFLAGS) failed for interface vwap2s2.2 (ops=1): Network is down",
+      "expect": {
+        "host": "vwap2s2.2",
+        "event": "interface_down_error",
+        "service": "VLAN",
+        "component": "ifconfig_helper"
+      }
+    },
+    {
+      "input": "wifi0ap5: STA c0:49:ef:8c:07:2c WPA: received EAPOL-Key frame (2/4 Pairwise)",
+      "expect": {
+        "host": "wifi0ap5",
+        "user": "c0:49:ef:8c:07:2c",
+        "event": "eapol_key_frame",
+        "message": "received EAPOL-Key frame (2/4 Pairwise)",
+        "service": "WPA"
+      }
+    },
+    {
+      "input": "wifi0ap5: STA c0:49:ef:8c:07:2c WPA: sending 1/4 msg of 4-Way Handshake",
+      "expect": {
+        "host": "wifi0ap5",
+        "user": "c0:49:ef:8c:07:2c",
+        "event": "wpa_handshake_start",
+        "message": "sending 1/4 msg of 4-Way Handshake",
+        "service": "WPA"
+      }
+    },
+    {
+      "input": "wifi0ap5: AP-STA-POSSIBLE-PSK-MISMATCH c0:49:ef:8c:07:2c",
+      "expect": {
+        "host": "wifi0ap5",
+        "user": "c0:49:ef:8c:07:2c",
+        "event": "psk_mismatch"
+      }
+    },
+    {
+      "input": "wifi0ap5: STA c0:49:ef:8c:07:2c IEEE 802.11: associated (aid 3)",
+      "expect": {
+        "host": "wifi0ap5",
+        "user": "c0:49:ef:8c:07:2c",
+        "event": "sta_associated",
+        "message": "associated (aid 3)"
+      }
+    },
+    {
+      "input": "wpa_driver_nl80211_set_key: ifindex=19 (wifi0ap5) alg=0 addr=0x768bf068 key_idx=0 set_tx=1 seq_len=0 key_len=0 key_flag=0x20 link_id=-1",
+      "expect": {
+        "host": "wifi0ap5",
+        "event": "set_key_driver_call",
+        "service": "wpa_driver_nl80211_set_key",
+        "process_id": "19"
+      }
+    }
+  ]
+}
