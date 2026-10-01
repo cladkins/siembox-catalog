@@ -1,0 +1,95 @@
+{
+  "schema": "siembox.parser/v1",
+  "name": "linux-apparmor-audit",
+  "parser_type": "regex",
+  "pattern": "^audit:\\s+type=(?<audit_type>\\d+)\\s+audit\\((?<audit_ts>[\\d.]+):(?<audit_seq>\\d+)\\):\\s+apparmor=\"(?<apparmor_decision>\\w+)\"\\s+operation=\"(?<operation>[^\"]+)\"\\s+class=\"(?<class>[^\"]+)\"\\s+profile=\"(?<profile>[^\"]+)\"\\s+pid=(?<pid>\\d+)\\s+comm=\"(?<comm>[^\"]+)\"\\s+requested_mask=\"(?<requested_mask>[^\"]+)\"\\s+denied_mask=\"(?<denied_mask>[^\"]+)\"\\s+peer=\"(?<peer>[^\"]+)\"",
+  "field_mappings": {
+    "pid": "process_id",
+    "comm": "process_name",
+    "peer": "target_user",
+    "class": "object_type",
+    "profile": "service",
+    "audit_ts": "timestamp_raw",
+    "audit_seq": "sequence",
+    "operation": "method",
+    "audit_type": "event_id",
+    "denied_mask": "denied_access",
+    "requested_mask": "requested_access",
+    "apparmor_decision": "action"
+  },
+  "description": "Parses Linux AppArmor audit log messages from the kernel audit subsystem, including DENIED/ALLOWED operations",
+  "priority": 200,
+  "derivations": [
+    {
+      "set": {
+        "event": "apparmor_denied"
+      },
+      "when": {
+        "action": {
+          "equals": "DENIED"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "apparmor_allowed"
+      },
+      "when": {
+        "action": {
+          "equals": "ALLOWED"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "apparmor_audit"
+      },
+      "when": {
+        "action": {
+          "equals": "AUDIT"
+        }
+      }
+    },
+    {
+      "set": {
+        "event": "apparmor_event"
+      },
+      "when": {
+        "action": {
+          "exists": true
+        }
+      }
+    },
+    {
+      "set": {
+        "severity": "warning"
+      },
+      "when": {
+        "action": {
+          "equals": "DENIED"
+        }
+      }
+    }
+  ],
+  "event_type": "apparmor_audit",
+  "enabled": true,
+  "test_samples": [
+    {
+      "input": "audit: type=1400 audit(1790883470.031:5199322): apparmor=\"DENIED\" operation=\"ptrace\" class=\"ptrace\" profile=\"docker-default\" pid=2869 comm=\"tokio-rt-worker\" requested_mask=\"read\" denied_mask=\"read\" peer=\"unconfined\"",
+      "expect": {
+        "event": "apparmor_denied",
+        "action": "DENIED",
+        "method": "ptrace",
+        "service": "docker-default",
+        "event_id": "1400",
+        "severity": "warning",
+        "process_id": "2869",
+        "object_type": "ptrace",
+        "target_user": "unconfined",
+        "process_name": "tokio-rt-worker",
+        "denied_access": "read",
+        "requested_access": "read"
+      }
+    }
+  ]
+}
