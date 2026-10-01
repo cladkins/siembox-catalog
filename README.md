@@ -86,6 +86,26 @@ protected: `validate-catalog` is a required check and changes land through
 reviewed, squash-merged PRs. A green check is the promise: it imports into
 SIEMBox and behaves the same.
 
+Two guards run on catalog content, one blocking and one advisory:
+
+- **`duplication-check.mjs`** (part of `validate-catalog`, **blocking**) — fails
+  a PR that adds an entry identical to an existing one by name or by functional
+  content.
+- **`consolidation-report.yml`** (monthly + on-demand, **advisory**) — scans for
+  entries that are *similar but not identical* and may be worth merging (e.g. two
+  parsers for the same log format that differ only in an optional prefix). It
+  never fails CI; it maintains a single "Catalog consolidation candidates"
+  tracking issue. Run it anytime locally:
+
+  ```bash
+  npm install js-yaml --no-save
+  node .github/scripts/similarity-scan.mjs .            # markdown report
+  node .github/scripts/similarity-scan.mjs . --threshold=0.5 --json
+  ```
+
+  Similar entries are found in this repo, but the actual merge is authored in the
+  main SIEMBox repo (`catalog/parsers` + `rules`) and mirrors back here.
+
 ## Contributing
 
 Read [CONTRIBUTING.md](./CONTRIBUTING.md). In short: add a

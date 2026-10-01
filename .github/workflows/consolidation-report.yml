@@ -1,0 +1,58 @@
+name: consolidation-report
+
+# Advisory monthly scan for SIMILAR parsers/detections that may be worth
+# combining into one. This NEVER fails CI — merging is a human judgement call
+# (exact/functional duplicates are the job of duplication-check.mjs, which does
+# gate). The latest report is kept in a single tracking issue.
+#
+# Note: scheduled/dispatch workflows only fire from the default branch, so this
+# becomes active once it's on main. Run it early with the "Run workflow" button
+# (workflow_dispatch), or locally: `node .github/scripts/similarity-scan.mjs`.
+on:
+  schedule:
+    - cron: '0 9 1 * *' # 1st of each month, 09:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    name: Scan for consolidation candidates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout catalog
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 20
+
+      - name: Scan
+        run: |
+          npm install js-yaml --no-save --no-audit --no-fund
+          node .github/scripts/similarity-scan.mjs . > consolidation-report.md
+          cat consolidation-report.md
+
+      - name: Upsert tracking issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Idempotent label; ignore "already exists".
+          gh label create consolidation \
+            --description "Catalog consolidation candidates (advisory)" \
+            --color 0e8a16 2>/dev/null || true
+
+          num=$(gh issue list --label consolidation --state open \
+                  --json number --jq '.[0].number // empty')
+          if [ -n "$num" ]; then
+            gh issue edit "$num" --body-file consolidation-report.md
+            echo "Updated tracking issue #$num"
+          else
+            gh issue create \
+              --title "Catalog consolidation candidates" \
+              --label consolidation \
+              --body-file consolidation-report.md
+          fi
