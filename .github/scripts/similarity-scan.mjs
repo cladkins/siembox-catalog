@@ -27,9 +27,9 @@
 // Usage:
 //   node .github/scripts/similarity-scan.mjs [catalogRoot=.] [--threshold=0.6] [--json]
 //
-// Acting on findings: parsers and detections are AUTHORED in cladkins/SIEMBOX
-// (catalog/parsers + rules) and mirrored here — land any actual merge there,
-// not in this repo (a change made only here surfaces as drift in the next sync).
+// Acting on findings: parsers and detections are AUTHORED in this repo, and
+// cladkins/SIEMBOX (catalog/parsers + rules) mirrors them by its weekly sync —
+// land any actual merge here, as a PR to this repo.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
@@ -291,8 +291,8 @@ if (AS_JSON) {
   md += `Exact duplicates are handled separately by \`duplication-check.mjs\`.\n\n`;
   md += `**${parsers.length}** parsers and **${detections.length}** detections scanned · `;
   md += `**${total}** candidate group(s) found.\n\n`;
-  md += `> Parsers/detections are authored in [cladkins/SIEMBOX](https://github.com/cladkins/SIEMBOX) `;
-  md += `(\`catalog/parsers\` + \`rules\`) and mirrored here — land any merge there, not in this repo.\n\n`;
+  md += `> Parsers/detections are authored in this repo; [cladkins/SIEMBOX](https://github.com/cladkins/SIEMBOX) `;
+  md += `(\`catalog/parsers\` + \`rules\`) mirrors them by its weekly sync — land any merge here.\n\n`;
   md += renderClusters('Parsers', parserClusters);
   md += renderClusters('Detections', detectionClusters);
   process.stdout.write(md);

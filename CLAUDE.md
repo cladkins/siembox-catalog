@@ -8,11 +8,13 @@ editor schema: `schema/parser.schema.json`.
 
 ## Gotchas
 
-**This repo is a published mirror.** The canonical source lives in the main
-SIEMBox repo (`cladkins/SIEMBOX`: `catalog/parsers/` and `rules/`), which
-mirrors here weekly via its `sync-catalog.yml` workflow (as a PR). A change
-made only here will surface as drift in the next sync PR — land content
-changes in the main repo (or both) to keep them.
+**This repo is the source of truth.** Parsers and detections are authored
+here (as PRs to this repo), and SIEMBox installs from it. The main SIEMBox repo
+(`cladkins/SIEMBOX`: `catalog/parsers/` and `rules/`) keeps an exact mirror,
+refreshed weekly by its `sync-catalog.yml` workflow as a PR, so a change made
+only on the SIEMBox side is reverted by the next sync. Land content changes
+here; when a SIEMBox change needs catalog content to change with it (a stricter
+validator, say), land the same content in both repos.
 
 **CI runs the real engine.** The `validate-catalog` workflow checks out
 `cladkins/SIEMBOX`, builds its validators, and runs every parser's
