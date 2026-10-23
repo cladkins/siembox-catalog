@@ -3,11 +3,11 @@ name: validate-catalog
 # Gate every submission. Each portable parser must pass strict schema validation
 # AND its own self-tests, run through the real SIEMBox parse -> derive -> normalize
 # pipeline; detections are validated against what the rules engine actually
-# supports. Parser regexes added or changed in the PR are also ReDoS-scanned.
+# supports; content packs are validated and their references resolved. Parser regexes added or changed in the PR are also ReDoS-scanned.
 #
 # This workflow runs on EVERY PR to main (no path filter) so it can always report
 # status and is therefore safe to mark as a required branch-protection check.
-# The expensive build + validate steps run only when parser/detection/schema
+# The expensive build + validate steps run only when parser/detection/pack/schema
 # files actually change; otherwise the job no-ops to green in seconds.
 #
 # Security posture: this uses `pull_request` (NOT `pull_request_target`), so fork
@@ -49,13 +49,13 @@ jobs:
             exit 0
           fi
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          CHANGED="$(git diff --name-only "$BASE_SHA" HEAD -- parsers detections schema || true)"
+          CHANGED="$(git diff --name-only "$BASE_SHA" HEAD -- parsers detections packs schema || true)"
           if [ -n "$CHANGED" ]; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
-            echo "Parser/detection/schema changes detected:"; echo "$CHANGED"
+            echo "Parser/detection/pack/schema changes detected:"; echo "$CHANGED"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
-            echo "No parser/detection/schema changes; validation steps skipped."
+            echo "No parser/detection/pack/schema changes; validation steps skipped."
           fi
           PARSERS="$(git diff --name-only --diff-filter=AM "$BASE_SHA" HEAD -- parsers | grep '\.parser\.json$' || true)"
           if [ -n "$PARSERS" ]; then
@@ -117,4 +117,21 @@ jobs:
             npm run validate-detections -- "$DET"
           else
             echo "No detections to validate."
+          fi
+
+      # Content packs: strict schema, ids unique and matching file names, every
+      # referenced parser / detection selector resolves against this catalog,
+      # Sigma ids are UUIDs, guide size caps, and no raw HTML, images or unsafe
+      # links in the guide markdown. Needs SIEMBox with `validate-packs`.
+      - name: Validate content packs (strict, references resolve)
+        if: steps.changes.outputs.relevant == 'true'
+        working-directory: siembox/backend
+        run: |
+          PACKS="$GITHUB_WORKSPACE/catalog/packs"
+          if [ -d "$PACKS" ] && find "$PACKS" -name '*.pack.yaml' -print -quit | grep -q .; then
+            npm run validate-packs -- "$PACKS" \
+              --parsers "$GITHUB_WORKSPACE/catalog/parsers" \
+              --detections "$GITHUB_WORKSPACE/catalog/detections"
+          else
+            echo "No packs to validate."
           fi

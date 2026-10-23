@@ -15,6 +15,11 @@ anything that's green here behaves identically once imported into SIEMBox.
 - **Detections** (`detections/<category>/*.yaml`) are rules that fire on those
   canonical fields: `conditions` (AND logic), an optional `aggregation`
   (count/threshold over a timeframe), a `severity`, and an `alert` template.
+- **Content packs** (`packs/<id>.pack.yaml`) bundle what one technology needs:
+  catalog parsers by name, catalog detections by category/tag/name, SigmaHQ
+  rules by Sigma id, and a setup guide. They reference content rather than copy
+  it, and carry a `version` so SIEMBox can show what a pack gained since you
+  installed it.
 
 The two compose: a parser normalizes `Failed password for admin from 203.0.113.5`
 into `user=admin`, `source_ip=203.0.113.5`, `event=… failed`; a detection then
@@ -46,6 +51,12 @@ SIEMBOX_CATALOG_PARSERS_PATH=parsers
 still honored. An optional `SIEMBOX_CATALOG_TOKEN` / `GITHUB_TOKEN` raises the
 GitHub API rate limit for catalog fetches.)
 
+**Content packs** — in SIEMBox: **Content Packs**. SIEMBox reads `packs/` with the
+same fetch and cache as the parsers (`SIEMBOX_CATALOG_PACKS_PATH`, default
+`packs`), shows each pack's setup guide before install, and installs its items
+through the normal catalog and SigmaHQ library paths. Older SIEMBox versions
+ignore `packs/` and use their built-in packs.
+
 **Detections** — the YAML under `detections/` *is* SIEMBox's native rule format
 (the same files that live in SIEMBox's own `rules/`). Import them through the
 rules engine / rules importer; each rule is self-contained and order-independent.
@@ -55,7 +66,9 @@ rules engine / rules importer; each rule is self-contained and order-independent
 ```
 parsers/      <name>.parser.json       — one portable parser per file
 detections/   <category>/<ID>-<slug>.yaml — detection rules, grouped by category
+packs/        <id>.pack.yaml           — content packs (parsers + detections + SigmaHQ rules + setup guide)
 schema/       parser.schema.json       — JSON Schema for parsers (editor autocomplete + docs)
+              pack.schema.json         — JSON Schema for content packs
 .github/      workflows/validate-catalog.yml — CI: schema + self-tests + ReDoS scan
               CODEOWNERS, pull_request_template.md, dependabot.yml, scripts/redos-scan.mjs
 SECURITY.md   — how to report a vulnerability
@@ -76,6 +89,9 @@ validator, and runs it against this catalog on every PR to `main`:
   `test_samples` through the real parse → derive → normalize pipeline.
 - `validate-detections` — strict validation of every rule against what the rules
   engine actually supports (operators, severities, aggregation, alert template).
+- `validate-packs` — strict pack schema, unique ids, every referenced parser and
+  detection selector resolves against this catalog, Sigma ids are UUIDs, guide
+  size caps, and no raw HTML, images or unsafe links in the guide markdown.
 - **ReDoS pre-scan** — parser regexes added or changed in a PR are checked with
   [`recheck`](https://github.com/makenowjust-labs/recheck); a catastrophic-
   backtracking pattern fails the build.
@@ -110,7 +126,8 @@ Two guards run on catalog content, one blocking and one advisory:
 
 Read [CONTRIBUTING.md](./CONTRIBUTING.md). In short: add a
 `parsers/<name>.parser.json` (with canonical field mappings and at least one
-`test_sample`) or a `detections/<category>/<name>.yaml` rule, open a PR, and make
+`test_sample`), a `detections/<category>/<name>.yaml` rule or a
+`packs/<id>.pack.yaml` content pack, open a PR, and make
 the **`validate-catalog`** check green.
 
 ## License

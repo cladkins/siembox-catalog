@@ -12,13 +12,15 @@ first try. See CONTRIBUTING.md for the full guide.
 
 - [ ] New parser
 - [ ] New detection rule
+- [ ] New or changed content pack (version bumped if its items changed)
 - [ ] Update to an existing parser or detection
 - [ ] Schema, CI, or tooling change
 
 ## Checklist
 
 - [ ] I ran the SIEMBox validator locally and it exits 0
-      (`npm run validate-parsers -- <path>` and/or `npm run validate-detections -- <path>`).
+      (`npm run validate-parsers -- <path>`, `npm run validate-detections -- <path>`
+      and/or `npm run validate-packs -- <catalog>/packs`).
 - [ ] Sample log lines use real data with IPs/secrets redacted to the
       documentation ranges (`203.0.113.0/24`, `198.51.100.0/24`).
 - [ ] Every distinct event type my parser surfaces has a `test_sample`.
