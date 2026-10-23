@@ -1,10 +1,12 @@
 # Contributing
 
-Thanks for improving SIEMBox's detection coverage! This catalog holds two kinds
-of contribution, both **data, not code**:
+Thanks for improving SIEMBox's detection coverage! This catalog holds three kinds
+of contribution, all **data, not code**:
 
 - a **parser** — teaches SIEMBox to read a new log source and emit canonical fields;
-- a **detection rule** — fires an alert when those canonical fields match a threat pattern.
+- a **detection rule** — fires an alert when those canonical fields match a threat pattern;
+- a **content pack** — bundles the parsers, detections and SigmaHQ rules for one
+  technology, with a setup guide, so it installs in one click.
 
 Both are gated by the **`validate-catalog`** CI check, which builds the validator
 from [SIEMBox](https://github.com/cladkins/siembox) and runs it against your
@@ -15,7 +17,7 @@ the section below for what you're adding.
 
 1. **Fork** this repository and clone your fork.
 2. Create a branch for your change.
-3. Add your `parsers/<name>.parser.json` or `detections/<category>/<name>.yaml`.
+3. Add your `parsers/<name>.parser.json`, `detections/<category>/<name>.yaml` or `packs/<id>.pack.yaml`.
 4. [Validate locally](#validate-locally) until the validator exits 0.
 5. Open a PR against `main`. Fill in the PR template checklist.
 6. A catalog maintainer (via `CODEOWNERS`) reviews and squash-merges once
@@ -145,6 +147,67 @@ response playbooks — is SIEMBox's
 
 ---
 
+## Contributing a content pack
+
+A pack is what the SIEMBox **Content Packs** page shows for one technology
+(Reverse Proxy & Web, Linux & Infrastructure, ...). It **references** content,
+it does not copy it: catalog parsers by name, catalog detections by category,
+tag or exact name, and [SigmaHQ](https://github.com/SigmaHQ/sigma) rules by their
+Sigma `id`. Installing the pack in SIEMBox installs each item through its normal
+path (Sigma rules through SIEMBox's SigmaHQ library) and turns the detections on.
+
+### File format
+
+`packs/<id>.pack.yaml` (editor schema: `schema/pack.schema.json`):
+
+```yaml
+schema: siembox.pack/v1
+id: reverse-proxy                  # kebab-case; the file name without .pack.yaml
+name: Reverse Proxy & Web
+description: nginx / Traefik / Caddy access + error logs with ...
+icon: Connection                   # Box, Connection, DataLine, Files, House, Key, Lock,
+                                   # Monitor, Share, VideoPlay, Cpu, Cloudy, Message
+version: 2                         # bump whenever parsers, detections or sigma change
+parsers: [traefik-access, caddy-access]
+detections:
+  categories: [reverse-proxy]      # detections/<category>/
+  tags: []                         # a tag on the rule
+  names: []                        # a rule's exact name
+sigma:
+  - id: 65354b83-a2ea-4ea6-8414-3ab38be0d409
+    title: Cross Site Scripting Strings
+setup:                             # 1-20 steps, shown before install
+  - title: Ship the logs
+    text: |                        # markdown, at most 4000 characters
+      Add a **File** source on a SIEMBox log shipper ...
+    code: |                        # optional, shown verbatim
+      volumes:
+        - /var/log/nginx:/var/log/nginx:ro
+    code_language: yaml
+```
+
+### Rules for packs
+
+- **Version.** Start at 1 and bump `version` whenever the item lists change.
+  SIEMBox records the version and items of each install; the next time the
+  catalog has more, the pack shows **What's new** with exactly the added items
+  and an **Install what's new** button.
+- **References must resolve.** Every parser name, detection category, tag and
+  name must exist in this catalog; CI checks.
+- **Sigma rules.** List only rules SIEMBox can run: the converter handles them
+  (Detection Rules → SigmaHQ lists them as convertible), the regex safety gate
+  accepts them, and the pack's parsers emit their fields (the library's
+  *compatible* view with the pack's parsers installed). Copy the title next to
+  the id. Sigma rules are under the Detection Rule License 1.1; SIEMBox keeps the
+  attribution on each installed rule.
+- **Setup guide.** Write it for someone setting the source up for the first
+  time: which log or container, where it lives, a shipper or compose snippet in
+  `code`, and how to check that events arrive. Markdown only: no raw HTML, no
+  images, and links must be http(s), mailto or relative. Put placeholders such
+  as `<host>` in `code`, or in backticks. At most 20 steps, 20000 characters.
+
+---
+
 ## Validate locally
 
 CI does this automatically. To reproduce locally, build the validator from SIEMBox
@@ -159,6 +222,9 @@ npm run validate-parsers -- /path/to/siembox-catalog/parsers
 
 # detections: strict rule validation
 npm run validate-detections -- /path/to/siembox-catalog/detections
+
+# packs: schema, references (finds ../parsers and ../detections), guide markdown
+npm run validate-packs -- /path/to/siembox-catalog/packs
 ```
 
 Both run in strict mode and exit non-zero with precise per-field diffs on any
@@ -203,6 +269,13 @@ contributions safe to import and safe to run:
 - [ ] `conditions` reference canonical fields a parser actually produces.
 - [ ] `severity` set appropriately; `alert.title` is clear and actionable.
 
-**Both:**
+**For a content pack:**
+
+- [ ] `packs/<id>.pack.yaml`, `id` matching the file name.
+- [ ] `version` bumped if parsers, detections or sigma changed.
+- [ ] Sigma rules are convertible, accepted by the regex gate, and fit the pack's parsers.
+- [ ] The setup guide says where the logs are, how to ship them, and how to check they arrive.
+
+**All:**
 
 - [ ] The **`validate-catalog`** CI check is green.
