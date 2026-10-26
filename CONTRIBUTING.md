@@ -6,7 +6,9 @@ of contribution, all **data, not code**:
 - a **parser** — teaches SIEMBox to read a new log source and emit canonical fields;
 - a **detection rule** — fires an alert when those canonical fields match a threat pattern;
 - a **content pack** — bundles the parsers, detections and SigmaHQ rules for one
-  technology, with a setup guide, so it installs in one click.
+  technology, with a setup guide, so it installs in one click;
+- an **application signature** — teaches Application Monitoring to recognize
+  one application from the evidence SIEMBox already has.
 
 Both are gated by the **`validate-catalog`** CI check, which builds the validator
 from [SIEMBox](https://github.com/cladkins/siembox) and runs it against your
@@ -17,7 +19,7 @@ the section below for what you're adding.
 
 1. **Fork** this repository and clone your fork.
 2. Create a branch for your change.
-3. Add your `parsers/<name>.parser.json`, `detections/<category>/<name>.yaml` or `packs/<id>.pack.yaml`.
+3. Add your `parsers/<name>.parser.json`, `detections/<category>/<name>.yaml`, `packs/<id>.pack.yaml` or `applications/<id>.app.yaml`.
 4. [Validate locally](#validate-locally) until the validator exits 0.
 5. Open a PR against `main`. Fill in the PR template checklist.
 6. A catalog maintainer (via `CODEOWNERS`) reviews and squash-merges once
@@ -206,6 +208,79 @@ setup:                             # 1-20 steps, shown before install
   images, and links must be http(s), mailto or relative. Put placeholders such
   as `<host>` in `code`, or in backticks. At most 20 steps, 20000 characters.
 
+## Contributing an application signature
+
+A signature is how SIEMBox's **Application Monitoring** recognizes one
+application. It matches evidence SIEMBox already stores, so write each matcher
+for the shape that evidence really has (the examples below are real shapes).
+SIEMBox's **Not identified** tab has a **Suggest signature** link that opens a
+pre-filled file here for a program name, image or user agent nothing matches.
+
+### File format
+
+`applications/<id>.app.yaml`:
+
+```yaml
+schema: siembox.app/v1
+id: plex                            # kebab-case; the file name without .app.yaml
+name: Plex Media Server
+vendor: Plex
+category: media-server              # see the list below
+description: Media server for movies, TV and music.
+website: https://www.plex.tv        # optional
+cpe: { vendor: plex, product: media_server }   # optional; helps link vulnerabilities
+supersedes: []                      # optional: ids this one wins over on the same evidence
+match:                              # one or more of:
+  syslog_program: [plex, plexmediaserver]      # the syslog TAG, exact, case-insensitive; "postfix/*" = postfix/<anything>
+  parser: [plex]                               # catalog parser names (must exist in parsers/)
+  service:                                     # nmap services on an asset
+    names: [postgresql]                        #   nmap service names (product-specific only: not ssh/http)
+    banner: ['^OpenSSH[_ ](\d+\.\d+(?:p\d+)?)']  #   regexes on a product banner; group 1 = version
+  container_image: [plexinc/pms-docker, linuxserver/plex, '*/linuxserver/plex']  # image globs, no tag
+  package: [plexmediaserver]                   # package names in endpoint (grype) findings
+  user_agent: ['^PlexMediaServer/(\d+(?:\.\d+)+)']  # regexes on the user agent; group 1 = version
+  dns: [plex.tv, plex.direct]                  # "x.y" = x.y and its subdomains; "*.x.y" = subdomains only
+  os: { family: linux, pretty_name: '^Ubuntu (\d+\.\d+)' }  # endpoint OS: GOOS + /etc/os-release PRETTY_NAME
+tests:                              # at least one matching test per matcher kind
+  - source: container_image
+    input: 'lscr.io/linuxserver/plex:1.40.0.7998-c29d4c0c8-ls210'
+    version: '1.40.0.7998'          # expected version (omit: not checked; null: none)
+  - source: user_agent
+    input: 'PlexMediaServer/1.40.0.7998-c29d4c0c8'
+    version: '1.40.0.7998'
+  - source: user_agent
+    input: 'curl/8.0'
+    match: false                    # a negative test: must NOT be this app
+```
+
+Categories: `auth`, `automation`, `backup`, `browser`, `container-runtime`,
+`database`, `dev-tools`, `dns`, `file-sharing`, `game`, `home-automation`,
+`http-client`, `mail`, `media-server`, `messaging`, `monitoring`, `network`,
+`operating-system`, `os-component`, `password-manager`, `productivity`,
+`remote-access`, `reverse-proxy`, `saas`, `security`, `virtualization`, `vpn`,
+`web-server`. Service tests take `input: { name, banner, version }`; OS tests
+`input: { family, pretty_name }`.
+
+### Rules for signatures
+
+- **Real shapes.** `syslog_program` is the TAG as SIEMBox stores it, without
+  the `[pid]` (`sshd`, `postfix/smtpd`, `Authentik Server`). Container images are
+  what `docker ps` shows (`lscr.io/linuxserver/plex:1.40.0`); the tag is the
+  version when it starts with a number, and `docker.io/library/` is folded
+  away. User agents come from web/proxy access logs. DNS names come from DNS
+  logs (Pi-hole), lower case.
+- **Claim only what is yours.** A value (a program name, an image glob, a
+  package, a domain, a regex) may belong to one signature only; CI checks. Do not
+  claim generic names (`ssh`, `http`, `python`, `google.com`).
+- **Regexes.** Plain JavaScript, no flags, at most one capture group (the
+  version; use `(?:...)` for the rest), no named groups or backreferences, and
+  they must pass the ReDoS check (the same one parsers and rules go through).
+  Anchor where you can (`^curl/`), use `\b` before a product token.
+- **Tests prove it.** Each matcher kind needs a matching test with a real
+  (redacted) value; add a `match: false` test when your matcher could catch a
+  neighbour (Chrome vs Edge). Tests run against the whole catalog, so a test
+  also fails if another signature takes the evidence instead.
+
 ---
 
 ## Validate locally
@@ -225,6 +300,9 @@ npm run validate-detections -- /path/to/siembox-catalog/detections
 
 # packs: schema, references (finds ../parsers and ../detections), guide markdown
 npm run validate-packs -- /path/to/siembox-catalog/packs
+
+# application signatures: schema, ReDoS, tests against the whole set (finds ../parsers)
+npm run validate-applications -- /path/to/siembox-catalog/applications
 ```
 
 Both run in strict mode and exit non-zero with precise per-field diffs on any
@@ -275,6 +353,12 @@ contributions safe to import and safe to run:
 - [ ] `version` bumped if parsers, detections or sigma changed.
 - [ ] Sigma rules are convertible, accepted by the regex gate, and fit the pack's parsers.
 - [ ] The setup guide says where the logs are, how to ship them, and how to check they arrive.
+
+**For an application signature:**
+
+- [ ] `applications/<id>.app.yaml`, `id` matching the file name.
+- [ ] Matchers written for real data shapes; nothing generic claimed.
+- [ ] A matching test per matcher kind (real, redacted values), plus `match: false` tests for near neighbours.
 
 **All:**
 
