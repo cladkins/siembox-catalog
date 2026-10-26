@@ -20,6 +20,11 @@ anything that's green here behaves identically once imported into SIEMBox.
   rules by Sigma id, and a setup guide. They reference content rather than copy
   it, and carry a `version` so SIEMBox can show what a pack gained since you
   installed it.
+- **Application signatures** (`applications/<id>.app.yaml`) teach SIEMBox's
+  **Application Monitoring** to recognize software from evidence it already has:
+  syslog program names, the parser that matched, nmap services, container
+  images, endpoint packages and OS, user agents and DNS queries. Each carries
+  `tests` that prove its matchers on real data shapes.
 
 The two compose: a parser normalizes `Failed password for admin from 203.0.113.5`
 into `user=admin`, `source_ip=203.0.113.5`, `event=… failed`; a detection then
@@ -57,6 +62,13 @@ same fetch and cache as the parsers (`SIEMBOX_CATALOG_PACKS_PATH`, default
 through the normal catalog and SigmaHQ library paths. Older SIEMBox versions
 ignore `packs/` and use their built-in packs.
 
+**Application signatures** — in SIEMBox: **Assets & Vulns → Application
+Monitoring** reads `applications/` with the same fetch and cache
+(`SIEMBOX_CATALOG_APPLICATIONS_PATH`, default `applications`) and matches every
+signature against what it sees; its **Not identified** tab links to a
+pre-filled new file here for anything no signature matches. Older SIEMBox
+versions ignore `applications/`.
+
 **Detections** — the YAML under `detections/` *is* SIEMBox's native rule format
 (the same files that live in SIEMBox's own `rules/`). Import them through the
 rules engine / rules importer; each rule is self-contained and order-independent.
@@ -67,6 +79,7 @@ rules engine / rules importer; each rule is self-contained and order-independent
 parsers/      <name>.parser.json       — one portable parser per file
 detections/   <category>/<ID>-<slug>.yaml — detection rules, grouped by category
 packs/        <id>.pack.yaml           — content packs (parsers + detections + SigmaHQ rules + setup guide)
+applications/ <id>.app.yaml            — application signatures (Application Monitoring)
 schema/       parser.schema.json       — JSON Schema for parsers (editor autocomplete + docs)
               pack.schema.json         — JSON Schema for content packs
 .github/      workflows/validate-catalog.yml — CI: schema + self-tests + ReDoS scan
@@ -92,6 +105,10 @@ validator, and runs it against this catalog on every PR to `main`:
 - `validate-packs` — strict pack schema, unique ids, every referenced parser and
   detection selector resolves against this catalog, Sigma ids are UUIDs, guide
   size caps, and no raw HTML, images or unsafe links in the guide markdown.
+- `validate-applications` — strict signature schema, unique ids, no matcher
+  value claimed by two applications, every referenced parser exists here,
+  every regex passes the same `recheck` ReDoS gate as SIEMBox's parsers and
+  rules, and every signature's `tests` pass against the whole set.
 - **ReDoS pre-scan** — parser regexes added or changed in a PR are checked with
   [`recheck`](https://github.com/makenowjust-labs/recheck); a catastrophic-
   backtracking pattern fails the build.
@@ -126,8 +143,9 @@ Two guards run on catalog content, one blocking and one advisory:
 
 Read [CONTRIBUTING.md](./CONTRIBUTING.md). In short: add a
 `parsers/<name>.parser.json` (with canonical field mappings and at least one
-`test_sample`), a `detections/<category>/<name>.yaml` rule or a
-`packs/<id>.pack.yaml` content pack, open a PR, and make
+`test_sample`), a `detections/<category>/<name>.yaml` rule, a
+`packs/<id>.pack.yaml` content pack or an `applications/<id>.app.yaml`
+application signature, open a PR, and make
 the **`validate-catalog`** check green.
 
 ## License

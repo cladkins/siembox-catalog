@@ -49,13 +49,13 @@ jobs:
             exit 0
           fi
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          CHANGED="$(git diff --name-only "$BASE_SHA" HEAD -- parsers detections packs schema || true)"
+          CHANGED="$(git diff --name-only "$BASE_SHA" HEAD -- parsers detections packs applications schema || true)"
           if [ -n "$CHANGED" ]; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
-            echo "Parser/detection/pack/schema changes detected:"; echo "$CHANGED"
+            echo "Catalog content changes detected:"; echo "$CHANGED"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
-            echo "No parser/detection/pack/schema changes; validation steps skipped."
+            echo "No parser/detection/pack/application/schema changes; validation steps skipped."
           fi
           PARSERS="$(git diff --name-only --diff-filter=AM "$BASE_SHA" HEAD -- parsers | grep '\.parser\.json$' || true)"
           if [ -n "$PARSERS" ]; then
@@ -134,4 +134,20 @@ jobs:
               --detections "$GITHUB_WORKSPACE/catalog/detections"
           else
             echo "No packs to validate."
+          fi
+
+      # Application signatures: strict schema, ids unique and matching file
+      # names, no matcher value claimed twice, every referenced parser exists in
+      # this catalog, every regex passes the ReDoS gate (recheck, as for
+      # parsers and rules), and every signature's tests pass against the whole
+      # set. Needs SIEMBox with `validate-applications`.
+      - name: Validate application signatures (strict, ReDoS, self-tests)
+        if: steps.changes.outputs.relevant == 'true'
+        working-directory: siembox/backend
+        run: |
+          APPS="$GITHUB_WORKSPACE/catalog/applications"
+          if [ -d "$APPS" ] && find "$APPS" -name '*.app.yaml' -print -quit | grep -q .; then
+            npm run validate-applications -- "$APPS" --parsers "$GITHUB_WORKSPACE/catalog/parsers"
+          else
+            echo "No application signatures to validate."
           fi
