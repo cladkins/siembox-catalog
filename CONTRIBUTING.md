@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for improving SIEMBox's detection coverage! This catalog holds three kinds
+Thanks for improving SIEMBox's detection coverage! This catalog holds five kinds
 of contribution, all **data, not code**:
 
 - a **parser** — teaches SIEMBox to read a new log source and emit canonical fields;
@@ -8,9 +8,11 @@ of contribution, all **data, not code**:
 - a **content pack** — bundles the parsers, detections and SigmaHQ rules for one
   technology, with a setup guide, so it installs in one click;
 - an **application signature** — teaches Application Monitoring to recognize
-  one application from the evidence SIEMBox already has.
+  one application from the evidence SIEMBox already has;
+- a **suggested scan** — a ready-made scheduled scan or endpoint scan policy
+  SIEMBox offers in one click (options and timing; the user adds the targets).
 
-Both are gated by the **`validate-catalog`** CI check, which builds the validator
+All are gated by the **`validate-catalog`** CI check, which builds the validator
 from [SIEMBox](https://github.com/cladkins/siembox) and runs it against your
 change. If it's green here, it imports into SIEMBox and behaves identically. Pick
 the section below for what you're adding.
@@ -19,7 +21,7 @@ the section below for what you're adding.
 
 1. **Fork** this repository and clone your fork.
 2. Create a branch for your change.
-3. Add your `parsers/<name>.parser.json`, `detections/<category>/<name>.yaml`, `packs/<id>.pack.yaml` or `applications/<id>.app.yaml`.
+3. Add your `parsers/<name>.parser.json`, `detections/<category>/<name>.yaml`, `packs/<id>.pack.yaml`, `applications/<id>.app.yaml` or `scans/<id>.scan.yaml`.
 4. [Validate locally](#validate-locally) until the validator exits 0.
 5. Open a PR against `main`. Fill in the PR template checklist.
 6. A catalog maintainer (via `CODEOWNERS`) reviews and squash-merges once
@@ -281,6 +283,83 @@ Categories: `auth`, `automation`, `backup`, `browser`, `container-runtime`,
   neighbour (Chrome vs Edge). Tests run against the whole catalog, so a test
   also fails if another signature takes the evidence instead.
 
+## Contributing a suggested scan
+
+A suggested scan is a ready-made scan SIEMBox offers on its **Scheduled Scans**
+page (**Suggested scans**) and in the Endpoints page's scan policies card
+(**Suggested policies**). **Add** creates it **disabled**, with its options and
+its schedule in the user's own time zone; the user then fills in the targets
+and enables it. So a suggestion is everything about a scan except *what* to
+scan.
+
+### File format
+
+`scans/<id>.scan.yaml`:
+
+```yaml
+schema: siembox.scan/v1
+id: vuln-exposed-panels-weekly     # kebab-case; the file name without .scan.yaml
+name: Weekly exposed admin panel check
+kind: vulnerability                # asset | vulnerability | container | log_discovery | endpoint_policy
+category: exposure                 # see the list below
+tags: [nuclei, panel, exposure]    # optional, kebab-case
+description: >-                    # what it does (up to 500 characters)
+  Finds login and admin panels with the Nuclei panel templates, once a week.
+why: >-                            # when and why to use it (up to 1000)
+  An admin panel reachable from the wrong network is a common way in.
+intrusive: false                   # true: it logs in, sends payloads, fuzzes or can disrupt
+# intrusive_note: ...              # required when intrusive: true
+load: light                        # light | moderate | heavy
+schedule:                          # calendar timing, WITHOUT a timezone (the user's is used)
+  frequency: weekly                # hourly (minute, every_hours) | daily (time) |
+  days: [1]                        # weekly (days 0=Sun..6, time) | monthly (day_of_month, time)
+  time: "05:00"                    # quote times
+options:                           # the scan's options, WITHOUT targets
+  templateSelection:
+    tags: [panel]
+    excludeTags: [intrusive, dos, fuzz]
+  rateLimit: 100
+inputs:                            # what the user fills in after adding it
+  - field: target
+    label: Host or range
+    hint: A host or CIDR range you own.
+  - field: shipper
+    label: Run from
+    hint: A log shipper on that network, if SIEMBox cannot reach it.
+```
+
+Per kind:
+
+| `kind` | `options` | `inputs` (* = required) |
+|---|---|---|
+| `asset` (Nmap) | `scanType`: `ping`, `port`, `service`, `os` | `targets`*, `shipper` |
+| `vulnerability` (Nuclei) | `templateSelection` (`all`, `cves`, `tags`, `templates` (ids or `<dir>/`), `severities`, `excludeTags`, `exclude`), `rateLimit`, `timeout` (ms) | `target`*, `shipper` |
+| `container` (Trivy) | `all_images: true`, or nothing (one image) | `image_ref`* (unless `all_images`) |
+| `log_discovery` | `mode`: `passive`, `active`, `full` | `cidrs` (empty = the saved Log Discovery scope), `shipper` |
+| `endpoint_policy` | `scans`: an entry for each of `vuln`, `yara`, `packages`, `inventory`: `{ enabled, schedule \| interval_minutes, window? }`; schedules and windows (`start`, `end`) without a timezone; no top-level `schedule` | `endpoints`* |
+
+Categories: `inventory`, `services`, `cves`, `exposure`, `misconfiguration`,
+`credentials`, `tls`, `dns`, `containers`, `log-sources`, `endpoints`.
+
+### Rules for suggested scans
+
+- **Never a target.** No `targets`, `target`, `image_ref`, CIDRs or shipper ids
+  in `options`, no IP address, CIDR or host name anywhere in `options` or
+  `inputs`, and no IP address or CIDR in any other text. Describe what to fill
+  in under `inputs` instead ("your LAN subnets in CIDR form").
+- **Non-intrusive by default.** A Nuclei selection is intrusive when it runs
+  all templates, selects an intrusive tag (`intrusive`, `dos`, `fuzz`,
+  `bruteforce`, `default-login`), or does not exclude `intrusive`, `dos` and
+  `fuzz`. Such a suggestion must say `intrusive: true` and explain the risk in
+  `intrusive_note`; SIEMBox marks it and asks before adding it.
+- **A schedule that fits the load.** Light scans can run daily or hourly; heavy
+  ones belong at night, weekly or monthly. The user's time zone is applied when
+  they add it, so write times as local wall-clock times.
+- **Options SIEMBox accepts.** The validator runs the options through the same
+  checks the Scheduled Scans and scan-policy APIs apply, and the schedule
+  through the same calendar rules. A tag that is not a common nuclei-templates
+  tag is a warning: check it exists.
+
 ---
 
 ## Validate locally
@@ -303,6 +382,9 @@ npm run validate-packs -- /path/to/siembox-catalog/packs
 
 # application signatures: schema, ReDoS, tests against the whole set (finds ../parsers)
 npm run validate-applications -- /path/to/siembox-catalog/applications
+
+# suggested scans: schema, schedules, options, no concrete targets, intrusiveness
+npm run validate-scans -- /path/to/siembox-catalog/scans
 ```
 
 Both run in strict mode and exit non-zero with precise per-field diffs on any
@@ -359,6 +441,13 @@ contributions safe to import and safe to run:
 - [ ] `applications/<id>.app.yaml`, `id` matching the file name.
 - [ ] Matchers written for real data shapes; nothing generic claimed.
 - [ ] A matching test per matcher kind (real, redacted values), plus `match: false` tests for near neighbours.
+
+**For a suggested scan:**
+
+- [ ] `scans/<id>.scan.yaml`, `id` matching the file name.
+- [ ] No target anywhere: what to scan is listed under `inputs`.
+- [ ] Intrusive selections say `intrusive: true` with an `intrusive_note`; the rest exclude `intrusive`, `dos` and `fuzz`.
+- [ ] The schedule suits the scan's load.
 
 **All:**
 

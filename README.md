@@ -25,6 +25,12 @@ anything that's green here behaves identically once imported into SIEMBox.
   syslog program names, the parser that matched, nmap services, container
   images, endpoint packages and OS, user agents and DNS queries. Each carries
   `tests` that prove its matchers on real data shapes.
+- **Suggested scans** (`scans/<id>.scan.yaml`) are ready-made scans SIEMBox
+  offers on its **Scheduled Scans** page and in the Endpoints page's scan
+  policies: asset discovery (Nmap), vulnerability template sets (Nuclei),
+  container images (Trivy), log discovery and endpoint scan policies. Each
+  carries the scan's options, a suggested calendar schedule and what the person
+  adding it must fill in. They never name a target.
 
 The two compose: a parser normalizes `Failed password for admin from 203.0.113.5`
 into `user=admin`, `source_ip=203.0.113.5`, `event=… failed`; a detection then
@@ -69,6 +75,13 @@ signature against what it sees; its **Not identified** tab links to a
 pre-filled new file here for anything no signature matches. Older SIEMBox
 versions ignore `applications/`.
 
+**Suggested scans** — in SIEMBox: **Scheduled Scans → Suggested scans** (and
+**Endpoints → Scan policies → Suggested policies**) reads `scans/` with the same
+fetch and cache (`SIEMBOX_CATALOG_SCANS_PATH`, default `scans`). **Add** creates
+a disabled schedule (or an unassigned endpoint scan policy) with the
+suggestion's options and timing in the user's time zone; the user fills in the
+targets and enables it. Older SIEMBox versions ignore `scans/`.
+
 **Detections** — the YAML under `detections/` *is* SIEMBox's native rule format
 (the same files that live in SIEMBox's own `rules/`). Import them through the
 rules engine / rules importer; each rule is self-contained and order-independent.
@@ -80,6 +93,7 @@ parsers/      <name>.parser.json       — one portable parser per file
 detections/   <category>/<ID>-<slug>.yaml — detection rules, grouped by category
 packs/        <id>.pack.yaml           — content packs (parsers + detections + SigmaHQ rules + setup guide)
 applications/ <id>.app.yaml            — application signatures (Application Monitoring)
+scans/        <id>.scan.yaml           — suggested scans (Scheduled Scans, endpoint scan policies)
 schema/       parser.schema.json       — JSON Schema for parsers (editor autocomplete + docs)
               pack.schema.json         — JSON Schema for content packs
 .github/      workflows/validate-catalog.yml — CI: schema + self-tests + ReDoS scan
@@ -109,6 +123,11 @@ validator, and runs it against this catalog on every PR to `main`:
   value claimed by two applications, every referenced parser exists here,
   every regex passes the same `recheck` ReDoS gate as SIEMBox's parsers and
   rules, and every signature's `tests` pass against the whole set.
+- `validate-scans` — strict suggestion schema, unique ids and names, a valid
+  calendar schedule without a time zone, options the SIEMBox Scheduled Scans
+  and scan-policy routes accept, every input the kind needs listed, no IP
+  address, CIDR or host name in options or inputs, and any Nuclei selection
+  that can run intrusive templates declared `intrusive: true`.
 - **ReDoS pre-scan** — parser regexes added or changed in a PR are checked with
   [`recheck`](https://github.com/makenowjust-labs/recheck); a catastrophic-
   backtracking pattern fails the build.
@@ -144,8 +163,9 @@ Two guards run on catalog content, one blocking and one advisory:
 Read [CONTRIBUTING.md](./CONTRIBUTING.md). In short: add a
 `parsers/<name>.parser.json` (with canonical field mappings and at least one
 `test_sample`), a `detections/<category>/<name>.yaml` rule, a
-`packs/<id>.pack.yaml` content pack or an `applications/<id>.app.yaml`
-application signature, open a PR, and make
+`packs/<id>.pack.yaml` content pack, an `applications/<id>.app.yaml`
+application signature or a `scans/<id>.scan.yaml` suggested scan, open a PR,
+and make
 the **`validate-catalog`** check green.
 
 ## License

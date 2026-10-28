@@ -5,15 +5,18 @@ Community catalog of portable SIEMBox content — data, not code. Parsers are
 declarative `derivations`, `test_samples`); detections are
 `detections/<category>/<ID>-<slug>.yaml`; content packs are
 `packs/<id>.pack.yaml` (references to parsers, detections and SigmaHQ rule ids,
-plus a setup guide). Authoring guide: `CONTRIBUTING.md`; editor schemas:
+plus a setup guide); application signatures are `applications/<id>.app.yaml`;
+suggested scans are `scans/<id>.scan.yaml` (a scan's options and calendar
+schedule, never its targets). Authoring guide: `CONTRIBUTING.md`; editor schemas:
 `schema/parser.schema.json`, `schema/pack.schema.json`.
 
 ## Gotchas
 
-**This repo is the source of truth.** Parsers, detections and content packs
-are authored here (as PRs to this repo), and SIEMBox installs from it. The main
-SIEMBox repo (`cladkins/SIEMBOX`: `catalog/parsers/`, `rules/` and
-`catalog/packs/`) keeps an exact mirror,
+**This repo is the source of truth.** Parsers, detections, content packs,
+application signatures and suggested scans are authored here (as PRs to this
+repo), and SIEMBox installs from it. The main SIEMBox repo (`cladkins/SIEMBOX`:
+`catalog/parsers/`, `rules/`, `catalog/packs/`, `catalog/applications/` and
+`catalog/scans/`) keeps an exact mirror,
 refreshed weekly by its `sync-catalog.yml` workflow as a PR, so a change made
 only on the SIEMBox side is reverted by the next sync. Land content changes
 here; when a SIEMBox change needs catalog content to change with it (a stricter
@@ -26,7 +29,9 @@ ReDoS scan (`recheck`) on new/changed regexes and a duplication check. A parser
 without at least one `test_sample`, or with a catastrophic-backtracking
 pattern, fails the build. Packs run through `validate-packs` with this repo's
 parsers and detections, so a pack naming a parser or category that does not
-exist here fails too.
+exist here fails too. Suggested scans run through `validate-scans`: one that
+names a target (an IP, CIDR or host name in its options or inputs) or calls an
+intrusive Nuclei selection non-intrusive fails.
 
 **Bump a pack's `version` when its items change.** SIEMBox records the version
 and item list of each install and shows the difference as "What's new"; a
