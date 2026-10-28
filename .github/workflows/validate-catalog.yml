@@ -3,11 +3,13 @@ name: validate-catalog
 # Gate every submission. Each portable parser must pass strict schema validation
 # AND its own self-tests, run through the real SIEMBox parse -> derive -> normalize
 # pipeline; detections are validated against what the rules engine actually
-# supports; content packs are validated and their references resolved. Parser regexes added or changed in the PR are also ReDoS-scanned.
+# supports; content packs are validated and their references resolved;
+# application signatures and suggested scans are validated. Parser regexes
+# added or changed in the PR are also ReDoS-scanned.
 #
 # This workflow runs on EVERY PR to main (no path filter) so it can always report
 # status and is therefore safe to mark as a required branch-protection check.
-# The expensive build + validate steps run only when parser/detection/pack/schema
+# The expensive build + validate steps run only when catalog content or schema
 # files actually change; otherwise the job no-ops to green in seconds.
 #
 # Security posture: this uses `pull_request` (NOT `pull_request_target`), so fork
@@ -49,13 +51,13 @@ jobs:
             exit 0
           fi
           BASE_SHA="${{ github.event.pull_request.base.sha }}"
-          CHANGED="$(git diff --name-only "$BASE_SHA" HEAD -- parsers detections packs applications schema || true)"
+          CHANGED="$(git diff --name-only "$BASE_SHA" HEAD -- parsers detections packs applications scans schema || true)"
           if [ -n "$CHANGED" ]; then
             echo "relevant=true" >> "$GITHUB_OUTPUT"
             echo "Catalog content changes detected:"; echo "$CHANGED"
           else
             echo "relevant=false" >> "$GITHUB_OUTPUT"
-            echo "No parser/detection/pack/application/schema changes; validation steps skipped."
+            echo "No parser/detection/pack/application/scan/schema changes; validation steps skipped."
           fi
           PARSERS="$(git diff --name-only --diff-filter=AM "$BASE_SHA" HEAD -- parsers | grep '\.parser\.json$' || true)"
           if [ -n "$PARSERS" ]; then
@@ -150,4 +152,21 @@ jobs:
             npm run validate-applications -- "$APPS" --parsers "$GITHUB_WORKSPACE/catalog/parsers"
           else
             echo "No application signatures to validate."
+          fi
+
+      # Suggested scans: strict schema, ids and names unique and matching file
+      # names, a valid calendar schedule without a time zone, options the
+      # Scheduled Scans and scan-policy routes accept, every required input
+      # listed, no concrete target (no IP, CIDR or host name in options or
+      # inputs), and intrusive Nuclei selections declared intrusive. Needs
+      # SIEMBox with `validate-scans`.
+      - name: Validate suggested scans (strict, schedules, no concrete targets)
+        if: steps.changes.outputs.relevant == 'true'
+        working-directory: siembox/backend
+        run: |
+          SCANS="$GITHUB_WORKSPACE/catalog/scans"
+          if [ -d "$SCANS" ] && find "$SCANS" -name '*.scan.yaml' -print -quit | grep -q .; then
+            npm run validate-scans -- "$SCANS"
+          else
+            echo "No suggested scans to validate."
           fi
