@@ -1,0 +1,16 @@
+schema: siembox.app/v1
+id: docker-engine
+name: Docker Engine
+vendor: Docker
+category: container-runtime
+description: Open-source container runtime and daemon for building, running, and managing containers.
+website: https://docs.docker.com/engine/
+cpe:
+  vendor: docker
+  product: docker
+match:
+  package:
+    - github.com/docker/docker
+tests:
+  - source: package
+    input: github.com/docker/docker
